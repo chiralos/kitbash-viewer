@@ -10,7 +10,8 @@ pub const HTML: &str = r#"<!DOCTYPE html>
       padding: 0;
       overflow: hidden;
       background-color: #2a2a2a;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: 
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     #canvas-container {
       width: 100vw;
@@ -90,8 +91,10 @@ pub const HTML: &str = r#"<!DOCTYPE html>
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      "three": 
+        "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": 
+        "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
     }
   }
   </script>
@@ -123,7 +126,8 @@ pub const HTML: &str = r#"<!DOCTYPE html>
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    document.getElementById('canvas-container').appendChild(renderer.domElement);
+    document.getElementById('canvas-container')
+      .appendChild(renderer.domElement);
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -134,9 +138,10 @@ pub const HTML: &str = r#"<!DOCTYPE html>
     scene.add(directionalLight);
 
     // Grid/ground plane
-    const gridSize = 20;
+    const gridSize      = 20;
     const gridDivisions = 20;
-    const gridHelper = new THREE.GridHelper(gridSize, gridDivisions, 0xaaaaaa, 0x666666);
+    const gridHelper    = new THREE.GridHelper(
+      gridSize, gridDivisions, 0xaaaaaa, 0x666666);
     scene.add(gridHelper);
 
     // Camera controls
@@ -151,13 +156,15 @@ pub const HTML: &str = r#"<!DOCTYPE html>
 
     // Wireframe mode: 0 = solid, 1 = solid + wireframe, 2 = wireframe only
     let wireframeMode = 0;
-    const wireframeOverlays = new Map(); // Map from object to wireframe overlay
+    // Map from object to wireframe overlay
+    const wireframeOverlays = new Map(); 
 
     // OBJ Loader
-    const objLoader = new OBJLoader();
+    const objLoader    = new OBJLoader();
     const loadedMeshes = new Map();
     const loadingFiles = new Set(); // Track files currently being loaded
-    const failedFiles = new Map(); // Track files that failed to load (filename -> error)
+    const failedFiles  = new Map(); // Track files that failed to load 
+                                    // (filename -> error)
 
     // Function to load and display an OBJ file
     function loadOBJ(filename) {
@@ -179,14 +186,16 @@ pub const HTML: &str = r#"<!DOCTYPE html>
           // Check if the object contains any actual geometry
           let hasMeshes = false;
           object.traverse((child) => {
-            if (child.isMesh && child.geometry && child.geometry.attributes.position) {
+            if (child.isMesh && child.geometry && 
+                child.geometry.attributes.position) {
               hasMeshes = true;
             }
           });
 
           if (!hasMeshes) {
             // Object loaded but contains no valid geometry
-            console.error(`Error loading ${filename}: No valid geometry found`);
+            console.error(
+              `Error loading ${filename}: No valid geometry found`);
             failedFiles.set(filename, {
               error: null,
               message: 'No valid geometry found in file',
@@ -204,7 +213,8 @@ pub const HTML: &str = r#"<!DOCTYPE html>
                 color: 0xcccccc,
                 flatShading: false,
                 side: THREE.DoubleSide
-                // TODO: May remove this and require correct winding order in OBJ files
+                // TODO: May remove this and require correct winding
+                //   order in OBJ files
               });
             }
           });
@@ -217,12 +227,14 @@ pub const HTML: &str = r#"<!DOCTYPE html>
           updateFileList();
         },
         (xhr) => {
-          console.log(`${filename}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
+          console.log(
+            `${filename}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
         },
         (error) => {
           console.error(`Error loading ${filename}:`, error);
           console.error(`  Error type: ${error.type || 'unknown'}`);
-          console.error(`  Error message: ${error.message || error.toString()}`);
+          console.error(
+            `  Error message: ${error.message || error.toString()}`);
 
           // Store error information
           failedFiles.set(filename, {
@@ -278,6 +290,47 @@ pub const HTML: &str = r#"<!DOCTYPE html>
       await loadAllFiles();
     }
 
+    // Set standard view (frames all visible objects from direction)
+    function setStandardView(direction, viewName) {
+      const visibleObjects =
+        Array.from(loadedMeshes.values()).filter(obj => obj.visible);
+      if (visibleObjects.length > 0) {
+        frameObjects(visibleObjects, direction);
+        console.log(viewName);
+      }
+    }
+
+    // Select adjacent object (previous: -1, next: +1)
+    function selectAdjacentObject(direction) {
+      if (loadedMeshes.size === 0) return;
+
+      const filenames = Array.from(loadedMeshes.keys()).sort();
+      const currentFilename = selectedObject ?
+        getObjectFilename(selectedObject) : null;
+      let currentIndex;
+
+      if (!currentFilename) {
+        // Nothing selected: pick first (prev) or last (next)
+        currentIndex = direction > 0 ? filenames.length - 1 : 0;
+      } else {
+        currentIndex = filenames.indexOf(currentFilename);
+        // Move in direction with wrap-around
+        currentIndex =
+          (currentIndex + direction + filenames.length) % filenames.length;
+      }
+
+      const newFilename = filenames[currentIndex];
+      const newObject = loadedMeshes.get(newFilename);
+
+      // Update highlighting
+      if (selectedObject) unhighlightObject(selectedObject);
+      selectedObject = newObject;
+      highlightObject(selectedObject);
+
+      console.log(`Selected: ${newFilename}`);
+      updateFileList();
+    }
+
     // Keyboard controls
     window.addEventListener('keydown', (event) => {
       switch(event.key) {
@@ -310,129 +363,53 @@ pub const HTML: &str = r#"<!DOCTYPE html>
             // H: Toggle visibility of selected object
             selectedObject.visible = !selectedObject.visible;
             const filename = getObjectFilename(selectedObject);
-            console.log(`${filename} ${selectedObject.visible ? 'shown' : 'hidden'}`);
+            console.log(
+              `${filename} ${selectedObject.visible ? 'shown' : 'hidden'}`);
             updateFileList();
           }
           break;
         case '[':
-          // Select previous object
-          if (loadedMeshes.size > 0) {
-            const filenames = Array.from(loadedMeshes.keys()).sort();
-            const currentFilename = selectedObject ? getObjectFilename(selectedObject) : null;
-            let currentIndex;
-
-            if (!currentFilename) {
-              // Nothing selected: select first object
-              currentIndex = 0;
-            } else {
-              currentIndex = filenames.indexOf(currentFilename);
-              // Move to previous, wrap around if needed
-              currentIndex = (currentIndex - 1 + filenames.length) % filenames.length;
-            }
-
-            const newFilename = filenames[currentIndex];
-            const newObject = loadedMeshes.get(newFilename);
-
-            // Update highlighting
-            if (selectedObject) unhighlightObject(selectedObject);
-            selectedObject = newObject;
-            highlightObject(selectedObject);
-
-            console.log(`Selected: ${newFilename}`);
-            updateFileList();
-          }
+          selectAdjacentObject(-1); // Previous
           break;
         case ']':
-          // Select next object
-          if (loadedMeshes.size > 0) {
-            const filenames = Array.from(loadedMeshes.keys()).sort();
-            const currentFilename = selectedObject ? getObjectFilename(selectedObject) : null;
-            let currentIndex;
-
-            if (!currentFilename) {
-              // Nothing selected: select last object
-              currentIndex = filenames.length - 1;
-            } else {
-              currentIndex = filenames.indexOf(currentFilename);
-              // Move to next, wrap around if needed
-              currentIndex = (currentIndex + 1) % filenames.length;
-            }
-
-            const newFilename = filenames[currentIndex];
-            const newObject = loadedMeshes.get(newFilename);
-
-            // Update highlighting
-            if (selectedObject) unhighlightObject(selectedObject);
-            selectedObject = newObject;
-            highlightObject(selectedObject);
-
-            console.log(`Selected: ${newFilename}`);
-            updateFileList();
-          }
+          selectAdjacentObject(+1); // Next
           break;
         case 'f':
         case 'F':
           if (event.shiftKey) {
             // Shift+F: Frame all visible objects
-            const visibleObjects = Array.from(loadedMeshes.values()).filter(obj => obj.visible);
+            const visibleObjects =
+              Array.from(loadedMeshes.values()).filter(obj => obj.visible);
             if (visibleObjects.length > 0) {
-              frameObjects(visibleObjects, camera.position.clone().sub(controls.target).normalize());
+              frameObjects(visibleObjects,
+                camera.position.clone().sub(controls.target).normalize());
               console.log('Framed all visible objects');
             }
           } else if (selectedObject) {
             // F: Frame selected object
-            frameObjects([selectedObject], camera.position.clone().sub(controls.target).normalize());
+            frameObjects([selectedObject],
+              camera.position.clone().sub(controls.target).normalize());
             const filename = getObjectFilename(selectedObject);
             console.log(`Framed: ${filename}`);
           }
           break;
         case '1':
-          // Front view
-          const allObjects1 = Array.from(loadedMeshes.values()).filter(obj => obj.visible);
-          if (allObjects1.length > 0) {
-            frameObjects(allObjects1, new THREE.Vector3(0, 0, 1));
-            console.log('Front view');
-          }
+          setStandardView(new THREE.Vector3(0, 0, 1), 'Front view');
           break;
         case '2':
-          // Back view
-          const allObjects2 = Array.from(loadedMeshes.values()).filter(obj => obj.visible);
-          if (allObjects2.length > 0) {
-            frameObjects(allObjects2, new THREE.Vector3(0, 0, -1));
-            console.log('Back view');
-          }
+          setStandardView(new THREE.Vector3(0, 0, -1), 'Back view');
           break;
         case '3':
-          // Right view
-          const allObjects3 = Array.from(loadedMeshes.values()).filter(obj => obj.visible);
-          if (allObjects3.length > 0) {
-            frameObjects(allObjects3, new THREE.Vector3(1, 0, 0));
-            console.log('Right view');
-          }
+          setStandardView(new THREE.Vector3(1, 0, 0), 'Right view');
           break;
         case '4':
-          // Left view
-          const allObjects4 = Array.from(loadedMeshes.values()).filter(obj => obj.visible);
-          if (allObjects4.length > 0) {
-            frameObjects(allObjects4, new THREE.Vector3(-1, 0, 0));
-            console.log('Left view');
-          }
+          setStandardView(new THREE.Vector3(-1, 0, 0), 'Left view');
           break;
         case '5':
-          // Top view
-          const allObjects5 = Array.from(loadedMeshes.values()).filter(obj => obj.visible);
-          if (allObjects5.length > 0) {
-            frameObjects(allObjects5, new THREE.Vector3(0, 1, 0));
-            console.log('Top view');
-          }
+          setStandardView(new THREE.Vector3(0, 1, 0), 'Top view');
           break;
         case '6':
-          // Bottom view
-          const allObjects6 = Array.from(loadedMeshes.values()).filter(obj => obj.visible);
-          if (allObjects6.length > 0) {
-            frameObjects(allObjects6, new THREE.Vector3(0, -1, 0));
-            console.log('Bottom view');
-          }
+          setStandardView(new THREE.Vector3(0, -1, 0), 'Bottom view');
           break;
         case 'w':
         case 'W':
@@ -469,7 +446,8 @@ pub const HTML: &str = r#"<!DOCTYPE html>
         return; // This was a drag, not a click
       }
 
-      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      // Calculate mouse position in normalized device coordinates
+      //   (-1 to +1)
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -493,7 +471,8 @@ pub const HTML: &str = r#"<!DOCTYPE html>
       if (intersects.length > 0) {
         // Find the root object (the loaded OBJ file object)
         let rootObject = intersects[0].object;
-        while (rootObject.parent && !loadedMeshes.has(getObjectFilename(rootObject))) {
+        while (rootObject.parent &&
+               !loadedMeshes.has(getObjectFilename(rootObject))) {
           rootObject = rootObject.parent;
         }
 
@@ -547,10 +526,12 @@ pub const HTML: &str = r#"<!DOCTYPE html>
       // Calculate camera distance to fit objects in view
       const maxDim = Math.max(size.x, size.y, size.z);
       const fov = camera.fov * (Math.PI / 180);
-      const cameraDistance = Math.abs(maxDim / Math.sin(fov / 2)) * 1.25; // 1.25x margin
+      const cameraDistance =
+        Math.abs(maxDim / Math.sin(fov / 2)) * 1.25; // 1.25x margin
 
       // Position camera along direction vector at calculated distance
-      const offset = direction.clone().normalize().multiplyScalar(cameraDistance);
+      const offset =
+        direction.clone().normalize().multiplyScalar(cameraDistance);
       camera.position.copy(center).add(offset);
 
       // Point controls at center
@@ -584,20 +565,24 @@ pub const HTML: &str = r#"<!DOCTYPE html>
             child.material.color.setHex(0xcccccc);
             // Create wireframe overlay
             const wireframeGeo = new THREE.EdgesGeometry(child.geometry);
-            const wireframeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
-            const wireframeLines = new THREE.LineSegments(wireframeGeo, wireframeMat);
+            const wireframeMat = new THREE.LineBasicMaterial(
+              { color: 0x000000, linewidth: 1 });
+            const wireframeLines =
+              new THREE.LineSegments(wireframeGeo, wireframeMat);
             child.add(wireframeLines);
 
             // Store reference for cleanup
             if (!wireframeOverlays.has(object)) {
               wireframeOverlays.set(object, []);
             }
-            wireframeOverlays.get(object).push({ mesh: child, wireframe: wireframeLines });
+            wireframeOverlays.get(object).push(
+              { mesh: child, wireframe: wireframeLines });
           } else if (wireframeMode === 2) {
             // Wireframe only - use light uniform color
             child.material.wireframe = true;
             child.material.color.setHex(0xdddddd);
-            child.material.emissive.setHex(0x333333); // Add slight glow for uniform appearance
+            // Add slight glow for uniform appearance
+            child.material.emissive.setHex(0x333333);
           }
         }
       });
@@ -618,7 +603,8 @@ pub const HTML: &str = r#"<!DOCTYPE html>
         if (child.isMesh) {
           // Store original emissive for later restoration
           if (!child.userData.originalEmissive) {
-            child.userData.originalEmissive = child.material.emissive.clone();
+            child.userData.originalEmissive = 
+              child.material.emissive.clone();
           }
           // Set highlight glow (subtle blue)
           child.material.emissive.setHex(0x224488);
@@ -650,12 +636,15 @@ pub const HTML: &str = r#"<!DOCTYPE html>
       ]);
 
       if (allFilenames.size === 0) {
-        fileListContent.innerHTML = '<div style="color: #888; font-style: italic;">No files loaded</div>';
+        fileListContent.innerHTML =
+          '<div style="color: #888; font-style: italic;">'
+          + 'No files loaded</div>';
         return;
       }
 
       const filenames = Array.from(allFilenames).sort();
-      const selectedFilename = selectedObject ? getObjectFilename(selectedObject) : null;
+      const selectedFilename = selectedObject ?
+        getObjectFilename(selectedObject) : null;
 
       filenames.forEach(filename => {
         const item = document.createElement('div');
@@ -712,8 +701,10 @@ pub const HTML: &str = r#"<!DOCTYPE html>
 
     // WebSocket connection for live updates
     function connectWebSocket() {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      const protocol =
+        window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws =
+        new WebSocket(`${protocol}//${window.location.host}/ws`);
 
       ws.onopen = () => {
         console.log('WebSocket connected - live file updates enabled');
@@ -724,11 +715,12 @@ pub const HTML: &str = r#"<!DOCTYPE html>
         console.log('File change event:', msg);
 
         switch(msg.type) {
-          case 'file_added':
+          case 'added':
             console.log(`Auto-loading new file: ${msg.filename}`);
-            loadOBJ(msg.filename); // loadOBJ handles duplicate checking internally
+            // loadOBJ handles duplicate checking internally
+            loadOBJ(msg.filename);
             break;
-          case 'file_modified':
+          case 'modified':
             console.log(`Auto-reloading modified file: ${msg.filename}`);
             // Remove old version if it exists
             if (loadedMeshes.has(msg.filename)) {
@@ -744,7 +736,7 @@ pub const HTML: &str = r#"<!DOCTYPE html>
             }
             loadOBJ(msg.filename); // loadOBJ handles duplicate checking
             break;
-          case 'file_removed':
+          case 'removed':
             console.log(`Removing deleted file: ${msg.filename}`);
             if (loadedMeshes.has(msg.filename)) {
               const object = loadedMeshes.get(msg.filename);

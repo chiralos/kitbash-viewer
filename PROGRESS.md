@@ -26,6 +26,7 @@
 
 ### Milestone 4: Robustness
 - [x] Error handling for malformed OBJ
+- [ ] Incorporate "three" dependency for offline use
 - [ ] WebSocket reconnection
 - [ ] Cross-platform testing
 - [ ] Documentation and usage examples

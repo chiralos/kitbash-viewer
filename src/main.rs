@@ -57,48 +57,37 @@ struct FileListResponse {
   files: Vec<FileInfo>,
 }
 
-#[derive(Clone, Debug)]
-enum FileChangeEvent {
-  FileAdded(String),
-  FileModified(String),
-  FileRemoved(String),
-}
-
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum WsMessage {
-  FileAdded { filename: String },
-  FileModified { filename: String },
-  FileRemoved { filename: String },
+enum FileEvent {
+  Added    { filename: String },
+  Modified { filename: String },
+  Removed  { filename: String },
 }
 
 #[derive(Clone)]
 struct AppState {
   scene_dir: PathBuf,
-  tx: broadcast::Sender<FileChangeEvent>,
+  tx: broadcast::Sender<FileEvent>,
 }
 
 async fn websocket_handler(
   ws: WebSocketUpgrade,
-  axum::extract::State(state): axum::extract::State<AppState>,
-) -> impl IntoResponse {
+  axum::extract::State(state): axum::extract::State<AppState>,) 
+    -> impl IntoResponse {
   ws.on_upgrade(move |socket| handle_socket(socket, state.tx))
 }
 
-async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<FileChangeEvent>) {
+async fn handle_socket(
+    socket: WebSocket,
+    tx: broadcast::Sender<FileEvent>) {
   let (mut sender, mut receiver) = socket.split();
   let mut rx = tx.subscribe();
 
   // Spawn a task to forward file change events to the WebSocket
   let mut send_task = tokio::spawn(async move {
     while let Ok(event) = rx.recv().await {
-      let msg = match event {
-        FileChangeEvent::FileAdded(filename) => WsMessage::FileAdded { filename },
-        FileChangeEvent::FileModified(filename) => WsMessage::FileModified { filename },
-        FileChangeEvent::FileRemoved(filename) => WsMessage::FileRemoved { filename },
-      };
-
-      let json = serde_json::to_string(&msg).unwrap();
+      let json = serde_json::to_string(&event).unwrap();
       if sender.send(Message::Text(json)).await.is_err() {
         break;
       }
@@ -114,8 +103,8 @@ async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<FileChangeEvent>
 
   // Wait for either task to finish
   tokio::select! {
-      _ = (&mut send_task) => recv_task.abort(),
-      _ = (&mut recv_task) => send_task.abort(),
+    _ = (&mut send_task) => recv_task.abort(),
+    _ = (&mut recv_task) => send_task.abort(),
   };
 }
 
@@ -212,7 +201,7 @@ async fn main() {
   }
 
   // Create broadcast channel for file change events
-  let (tx, _rx) = broadcast::channel::<FileChangeEvent>(100);
+  let (tx, _rx) = broadcast::channel::<FileEvent>(100);
   let tx_clone = tx.clone();
 
   // Clone scene_dir before moving into async block
@@ -222,7 +211,8 @@ async fn main() {
   tokio::spawn(async move {
     let (watch_tx, mut watch_rx) = tokio::sync::mpsc::channel(100);
 
-    let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+    let mut watcher = notify::recommended_watcher(
+      move |res: Result<Event, notify::Error>| {
       if let Ok(event) = res {
         let _ = watch_tx.blocking_send(event);
       }
@@ -236,12 +226,14 @@ async fn main() {
     println!("File watcher started for {:?}", scene_dir_for_watcher);
 
     // Debounce map: filename -> (last_event_kind, last_time)
-    let mut last_events: HashMap<String, (String, Instant)> = HashMap::new();
+    let mut last_events = HashMap::new();
     let debounce_duration = Duration::from_millis(100);
 
     while let Some(event) = watch_rx.recv().await {
       for path in event.paths {
-        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+        //if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+        if let Some(file_name) = path.file_name()
+                                     .and_then(|n| n.to_str()) {
           if file_name.ends_with(".obj") {
             // Check if file actually exists
             let file_exists = path.exists();
@@ -254,7 +246,8 @@ async fn main() {
             };
 
             // Verify file state matches event type
-            // If we get a create/modify event but file doesn't exist, treat as remove
+            // If we get a create/modify event but file doesn't exist, 
+            //   treat as remove
             // If we get a remove event but file exists, ignore it
             let actual_event_kind = if !file_exists {
               "remove"
@@ -263,9 +256,11 @@ async fn main() {
             };
 
             let now = Instant::now();
-            let should_send = if let Some((last_kind, last_time)) = last_events.get(file_name) {
+            let should_send = if 
+              let Some((lk, lt)) = last_events.get(file_name) {
               // Only send if different type or enough time passed
-              last_kind != actual_event_kind || now.duration_since(*last_time) > debounce_duration
+              lk != actual_event_kind || 
+              now.duration_since(*lt) > debounce_duration
             } else {
               true
             };
@@ -274,16 +269,22 @@ async fn main() {
               let change_event = if actual_event_kind == "remove" {
                 println!("File removed: {}", file_name);
                 // Keep remove in debounce map to prevent duplicates
-                last_events.insert(file_name.to_string(), (actual_event_kind.to_string(), now));
-                Some(FileChangeEvent::FileRemoved(file_name.to_string()))
+                last_events.insert(
+                  file_name.to_string(), 
+                  (actual_event_kind.to_string(), now));
+                Some(FileEvent::Removed { filename: file_name.to_string() })
               } else if actual_event_kind == "create" && file_exists {
                 println!("File created: {}", file_name);
-                last_events.insert(file_name.to_string(), (actual_event_kind.to_string(), now));
-                Some(FileChangeEvent::FileAdded(file_name.to_string()))
+                last_events.insert(
+                  file_name.to_string(), 
+                  (actual_event_kind.to_string(), now));
+                Some(FileEvent::Added { filename: file_name.to_string() })
               } else if actual_event_kind == "modify" && file_exists {
                 println!("File modified: {}", file_name);
-                last_events.insert(file_name.to_string(), (actual_event_kind.to_string(), now));
-                Some(FileChangeEvent::FileModified(file_name.to_string()))
+                last_events.insert(
+                  file_name.to_string(), 
+                  (actual_event_kind.to_string(), now));
+                Some(FileEvent::Modified { filename: file_name.to_string() })
               } else {
                 None
               };
